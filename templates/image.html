@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image OCR Analysis - TruthGuard AI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/image.css') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <i class="fas fa-shield-alt"></i>
+                <span>TruthGuard</span>
+            </div>
+            <div class="nav-menu">
+                <a href="{{ url_for('landing') }}" class="nav-link">Home</a>
+                <a href="{{ url_for('single_verification') }}" class="nav-link">Single Check</a>
+                <a href="{{ url_for('bulk_verification') }}" class="nav-link">Bulk Check</a>
+                <a href="{{ url_for('image_verification') }}" class="nav-link active">Image OCR</a>
+                <a href="{{ url_for('file_verification') }}" class="nav-link">File Upload</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- Header -->
+        <header class="page-header">
+            <div class="header-content">
+                <div class="header-icon">
+                    <i class="fas fa-camera"></i>
+                </div>
+                <div class="header-text">
+                    <h1>Image OCR Analysis</h1>
+                    <p>Extract and analyze text from news screenshots using advanced OCR technology</p>
+                </div>
+            </div>
+            <div class="header-stats">
+                <div class="stat-badge">
+                    <i class="fas fa-eye"></i>
+                    <span>Text Recognition</span>
+                </div>
+                <div class="stat-badge">
+                    <i class="fas fa-language"></i>
+                    <span>Multi-language</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="content-grid">
+            <!-- Upload Section -->
+            <section class="upload-section">
+                <div class="card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-upload"></i> Upload Image</h2>
+                        <p>Upload a screenshot or photo of a news article for text extraction and analysis</p>
+                    </div>
+                    <div class="card-body">
+                        <div class="upload-area" id="upload-area">
+                            <input type="file" id="image-upload" accept="image/*" style="display: none;">
+                            <div class="upload-content" id="upload-content">
+                                <div class="upload-icon">
+                                    <i class="fas fa-cloud-upload-alt"></i>
+                                </div>
+                                <h3>Drop your image here</h3>
+                                <p>or click to browse files</p>
+                                <div class="file-types">
+                                    <span>Supports: JPG, PNG, JPEG, GIF, BMP</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Image Preview -->
+                        <div class="image-preview" id="image-preview" style="display: none;">
+                            <div class="preview-header">
+                                <h4>Image Preview</h4>
+                                <button class="btn btn-secondary" onclick="clearImage()">
+                                    <i class="fas fa-times"></i> Remove
+                                </button>
+                            </div>
+                            <div class="preview-container">
+                                <img id="preview-img" alt="Preview">
+                            </div>
+                            <div class="preview-info">
+                                <span id="file-name"></span>
+                                <span id="file-size"></span>
+                            </div>
+                        </div>
+
+                        <!-- Process Button -->
+                        <div class="process-actions" id="process-actions" style="display: none;">
+                            <button class="btn btn-primary btn-large" onclick="processImage()" id="process-btn">
+                                <i class="fas fa-search"></i> Extract & Analyze Text
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tips Section -->
+                <div class="tips-section">
+                    <h3>Tips for Better Results</h3>
+                    <div class="tips-grid">
+                        <div class="tip-card">
+                            <div class="tip-icon">
+                                <i class="fas fa-sun"></i>
+                            </div>
+                            <h4>Good Lighting</h4>
+                            <p>Ensure the image is well-lit and clear for accurate text recognition</p>
+                        </div>
+                        <div class="tip-card">
+                            <div class="tip-icon">
+                                <i class="fas fa-align-left"></i>
+                            </div>
+                            <h4>Clear Text</h4>
+                            <p>Use high-resolution images with readable, non-blurry text</p>
+                        </div>
+                        <div class="tip-card">
+                            <div class="tip-icon">
+                                <i class="fas fa-crop"></i>
+                            </div>
+                            <h4>Crop Properly</h4>
+                            <p>Crop the image to focus on the text content for better accuracy</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Results Section -->
+            <section class="results-section" id="results-section" style="display: none;">
+                <div class="card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-chart-bar"></i> OCR Analysis Results</h2>
+                        <div class="analysis-meta">
+                            <span id="analysis-time"></span>
+                            <span id="text-length"></span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <!-- Extracted Text -->
+                        <div class="extracted-text-section">
+                            <div class="section-header">
+                                <h3><i class="fas fa-file-alt"></i> Extracted Text</h3>
+                                <button class="btn btn-outline" onclick="copyText()">
+                                    <i class="fas fa-copy"></i> Copy Text
+                                </button>
+                            </div>
+                            <div class="text-container">
+                                <div id="extracted-text" class="extracted-text"></div>
+                            </div>
+                        </div>
+
+                        <!-- Analysis Results -->
+                        <div class="analysis-results">
+                            <div class="prediction-card">
+                                <div class="prediction-header">
+                                    <div class="prediction-title">
+                                        <h3>Verification Result</h3>
+                                        <p>AI analysis of the extracted text content</p>
+                                    </div>
+                                    <div class="prediction-badge" id="prediction-badge">
+                                        <span id="prediction-emoji"></span>
+                                        <span id="prediction-text"></span>
+                                    </div>
+                                </div>
+                                
+                                <!-- Confidence Meter -->
+                                <div class="confidence-section">
+                                    <div class="confidence-header">
+                                        <h4>Confidence Level</h4>
+                                        <span id="confidence-value">0%</span>
+                                    </div>
+                                    <div class="confidence-meter">
+                                        <div class="meter-track">
+                                            <div class="meter-fill" id="confidence-fill"></div>
+                                        </div>
+                                        <div class="confidence-labels">
+                                            <span>Low</span>
+                                            <span>Medium</span>
+                                            <span>High</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Word Analysis -->
+                                <div class="word-analysis">
+                                    <div class="analysis-grid">
+                                        <div class="analysis-card">
+                                            <div class="analysis-header">
+                                                <i class="fas fa-exclamation-triangle"></i>
+                                                <h4>Suspicious Indicators</h4>
+                                            </div>
+                                            <div class="word-list" id="fake-words-list"></div>
+                                        </div>
+                                        <div class="analysis-card">
+                                            <div class="analysis-header">
+                                                <i class="fas fa-check-circle"></i>
+                                                <h4>Trust Indicators</h4>
+                                            </div>
+                                            <div class="word-list" id="real-words-list"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="action-buttons">
+                            <button class="btn btn-secondary" onclick="analyzeAnother()">
+                                <i class="fas fa-redo"></i> Analyze Another Image
+                            </button>
+                            <button class="btn btn-outline" onclick="saveReport()">
+                                <i class="fas fa-download"></i> Save Full Report
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loading-overlay" style="display: none;">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <h3>Processing Image</h3>
+            <p>Extracting text and analyzing content...</p>
+            <div class="loading-steps">
+                <div class="step active">
+                    <i class="fas fa-check"></i>
+                    <span>Uploading image</span>
+                </div>
+                <div class="step">
+                    <i class="fas fa-check"></i>
+                    <span>Extracting text (OCR)</span>
+                </div>
+                <div class="step">
+                    <i class="fas fa-check"></i>
+                    <span>Analyzing content</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/image.js') }}"></script>
+</body>
+</html>

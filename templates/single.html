@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Single News Verification - TruthGuard AI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/single.css') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <i class="fas fa-shield-alt"></i>
+                <span>TruthGuard</span>
+            </div>
+            <div class="nav-menu">
+                <a href="{{ url_for('landing') }}" class="nav-link">Home</a>
+                <a href="{{ url_for('single_verification') }}" class="nav-link active">Single Check</a>
+                <a href="{{ url_for('bulk_verification') }}" class="nav-link">Bulk Check</a>
+                <a href="{{ url_for('image_verification') }}" class="nav-link">Image OCR</a>
+                <a href="{{ url_for('file_verification') }}" class="nav-link">File Upload</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- Header -->
+        <header class="page-header">
+            <div class="header-content">
+                <div class="header-icon">
+                    <i class="fas fa-file-alt"></i>
+                </div>
+                <div class="header-text">
+                    <h1>Single News Verification</h1>
+                    <p>Analyze individual news articles with detailed AI-powered insights</p>
+                </div>
+            </div>
+            <div class="header-stats">
+                <div class="stat-badge">
+                    <i class="fas fa-bolt"></i>
+                    <span>Real-time Analysis</span>
+                </div>
+                <div class="stat-badge">
+                    <i class="fas fa-chart-line"></i>
+                    <span>95% Accuracy</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="content-grid">
+            <!-- Input Section -->
+            <section class="input-section">
+                <div class="card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-edit"></i> Enter News Text</h2>
+                        <p>Paste or type the news article you want to verify</p>
+                    </div>
+                    <div class="card-body">
+                        <div class="input-group">
+                            <textarea id="news-text" placeholder="Paste news article here... Example: 'Breaking: Scientists discover revolutionary new energy source that could change the world forever. The secret technology is being kept hidden from the public...'" rows="12"></textarea>
+                            <div class="input-footer">
+                                <div class="char-count">
+                                    <span id="char-count">0</span> characters
+                                </div>
+                                <div class="input-actions">
+                                    <button class="btn btn-secondary" onclick="clearText()">
+                                        <i class="fas fa-eraser"></i> Clear
+                                    </button>
+                                    <button class="btn btn-primary" onclick="analyzeSingleNews()" id="analyze-btn">
+                                        <i class="fas fa-search"></i> Analyze News
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Examples -->
+                <div class="examples-section">
+                    <h3>Try these examples:</h3>
+                    <div class="examples-grid">
+                        <div class="example-card" onclick="loadExample('fake')">
+                            <div class="example-badge fake">Fake</div>
+                            <p>"Shocking secret about COVID vaccines they don't want you to know! Must see!"</p>
+                            <i class="fas fa-arrow-right"></i>
+                        </div>
+                        <div class="example-card" onclick="loadExample('real')">
+                            <div class="example-badge real">Real</div>
+                            <p>"New study from Harvard University shows promising results in cancer research."</p>
+                            <i class="fas fa-arrow-right"></i>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Results Section -->
+            <section class="results-section" id="results-section" style="display: none;">
+                <div class="card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-chart-bar"></i> Analysis Results</h2>
+                        <div class="analysis-meta">
+                            <span id="analysis-time"></span>
+                            <span id="analysis-id"></span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <!-- Prediction Card -->
+                        <div class="prediction-card">
+                            <div class="prediction-header">
+                                <div class="prediction-title">
+                                    <h3>Verification Result</h3>
+                                    <p>AI-powered analysis of your news content</p>
+                                </div>
+                                <div class="prediction-badge" id="prediction-badge">
+                                    <span id="prediction-emoji"></span>
+                                    <span id="prediction-text"></span>
+                                </div>
+                            </div>
+                            
+                            <!-- Confidence Meter -->
+                            <div class="confidence-section">
+                                <div class="confidence-header">
+                                    <h4>Confidence Level</h4>
+                                    <span id="confidence-value">0%</span>
+                                </div>
+                                <div class="confidence-meter">
+                                    <div class="meter-track">
+                                        <div class="meter-fill" id="confidence-fill"></div>
+                                    </div>
+                                    <div class="confidence-labels">
+                                        <span>Low</span>
+                                        <span>Medium</span>
+                                        <span>High</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Detailed Analysis -->
+                            <div class="analysis-details">
+                                <div class="analysis-grid">
+                                    <!-- Word Analysis -->
+                                    <div class="analysis-card">
+                                        <div class="analysis-header">
+                                            <i class="fas fa-exclamation-triangle"></i>
+                                            <h4>Suspicious Indicators</h4>
+                                        </div>
+                                        <div class="word-list" id="fake-words-list">
+                                            <!-- Words will be populated by JavaScript -->
+                                        </div>
+                                        <p class="analysis-note">Words commonly found in misleading content</p>
+                                    </div>
+
+                                    <div class="analysis-card">
+                                        <div class="analysis-header">
+                                            <i class="fas fa-check-circle"></i>
+                                            <h4>Trust Indicators</h4>
+                                        </div>
+                                        <div class="word-list" id="real-words-list">
+                                            <!-- Words will be populated by JavaScript -->
+                                        </div>
+                                        <p class="analysis-note">Words associated with credible reporting</p>
+                                    </div>
+                                </div>
+
+                                <!-- Text Analysis -->
+                                <div class="text-analysis">
+                                    <div class="analysis-header">
+                                        <i class="fas fa-search"></i>
+                                        <h4>Content Analysis</h4>
+                                    </div>
+                                    <div class="text-metrics">
+                                        <div class="metric">
+                                            <span class="metric-value" id="word-count">0</span>
+                                            <span class="metric-label">Words</span>
+                                        </div>
+                                        <div class="metric">
+                                            <span class="metric-value" id="sentence-count">0</span>
+                                            <span class="metric-label">Sentences</span>
+                                        </div>
+                                        <div class="metric">
+                                            <span class="metric-value" id="readability-score">0</span>
+                                            <span class="metric-label">Readability</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="action-buttons">
+                            <button class="btn btn-secondary" onclick="analyzeAgain()">
+                                <i class="fas fa-redo"></i> Analyze Another
+                            </button>
+                            <button class="btn btn-outline" onclick="shareResults()">
+                                <i class="fas fa-share"></i> Share Results
+                            </button>
+                            <button class="btn btn-outline" onclick="saveAnalysis()">
+                                <i class="fas fa-download"></i> Save Report
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loading-overlay" style="display: none;">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <h3>Analyzing Content</h3>
+            <p>Our AI is examining the news article for authenticity indicators...</p>
+            <div class="loading-steps">
+                <div class="step active">
+                    <i class="fas fa-check"></i>
+                    <span>Processing text</span>
+                </div>
+                <div class="step">
+                    <i class="fas fa-check"></i>
+                    <span>Analyzing patterns</span>
+                </div>
+                <div class="step">
+                    <i class="fas fa-check"></i>
+                    <span>Generating results</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/single.js') }}"></script>
+</body>
+</html>

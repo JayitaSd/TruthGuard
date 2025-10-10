@@ -43,10 +43,10 @@ def load_in_chunks(file, label, chunksize=50000, max_chunks=2):
 # ✅ Load Fake/Real Datasets
 # =========================
 print("⏳ Loading True news...")
-true = load_in_chunks("./True.csv", label=1, chunksize=50000, max_chunks=2)
+true = load_in_chunks("/home/jayita_s/projects/new_fake/static/data/True.csv", label=1, chunksize=50000, max_chunks=2)
 
 print("⏳ Loading Fake news...")
-fake = load_in_chunks("./Fake.csv", label=0, chunksize=50000, max_chunks=2)
+fake = load_in_chunks("/home/jayita_s/projects/new_fake/static/data/Fake.csv", label=0, chunksize=50000, max_chunks=2)
 
 # ✅ Combine datasets
 data = pd.concat([true, fake], axis=0).reset_index(drop=True)
@@ -104,6 +104,3 @@ def ocr_and_check(img_path):
     full_text = " ".join(extracted_lines) 
     print("\n Fake News Prediction:")
     print(check_news(full_text))
-
-
-ocr_and_check("./Screenshot 2025-10-02 201803.png")

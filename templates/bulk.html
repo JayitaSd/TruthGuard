@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bulk News Verification - TruthGuard AI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bulk.css') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <i class="fas fa-shield-alt"></i>
+                <span>TruthGuard</span>
+            </div>
+            <div class="nav-menu">
+                <a href="{{ url_for('landing') }}" class="nav-link">Home</a>
+                <a href="{{ url_for('single_verification') }}" class="nav-link">Single Check</a>
+                <a href="{{ url_for('bulk_verification') }}" class="nav-link active">Bulk Check</a>
+                <a href="{{ url_for('image_verification') }}" class="nav-link">Image OCR</a>
+                <a href="{{ url_for('file_verification') }}" class="nav-link">File Upload</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- Header -->
+        <header class="page-header">
+            <div class="header-content">
+                <div class="header-icon">
+                    <i class="fas fa-layer-group"></i>
+                </div>
+                <div class="header-text">
+                    <h1>Bulk News Verification</h1>
+                    <p>Analyze multiple news articles simultaneously with batch processing</p>
+                </div>
+            </div>
+            <div class="header-stats">
+                <div class="stat-badge">
+                    <i class="fas fa-rocket"></i>
+                    <span>Batch Processing</span>
+                </div>
+                <div class="stat-badge">
+                    <i class="fas fa-chart-pie"></i>
+                    <span>Summary Analytics</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="content-grid">
+            <!-- Input Section -->
+            <section class="input-section">
+                <div class="card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-edit"></i> Add News Items</h2>
+                        <p>Enter multiple news articles for batch analysis (up to 10 items)</p>
+                    </div>
+                    <div class="card-body">
+                        <div class="bulk-controls">
+                            <button class="btn btn-secondary" onclick="addNewsItem()">
+                                <i class="fas fa-plus"></i> Add Item
+                            </button>
+                            <button class="btn btn-outline" onclick="clearAllItems()">
+                                <i class="fas fa-trash"></i> Clear All
+                            </button>
+                            <div class="items-count">
+                                <span id="items-count">1</span> items
+                            </div>
+                        </div>
+
+                        <div class="bulk-items" id="bulk-items">
+                            <!-- Items will be added dynamically -->
+                            <div class="bulk-item" data-id="1">
+                                <div class="item-header">
+                                    <span class="item-number">#1</span>
+                                    <button class="btn-remove" onclick="removeItem(1)" title="Remove item">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                                <textarea class="news-textarea" placeholder="Enter news article 1..." rows="4"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="bulk-actions">
+                            <button class="btn btn-primary btn-large" onclick="analyzeBulkNews()" id="analyze-btn">
+                                <i class="fas fa-play"></i> Analyze All Items
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Templates -->
+                <div class="templates-section">
+                    <h3>Quick Templates</h3>
+                    <div class="templates-grid">
+                        <div class="template-card" onclick="loadSampleData('mixed')">
+                            <div class="template-icon">
+                                <i class="fas fa-random"></i>
+                            </div>
+                            <h4>Mixed Sample</h4>
+                            <p>Load sample data with both real and fake news examples</p>
+                        </div>
+                        <div class="template-card" onclick="loadSampleData('fake')">
+                            <div class="template-icon">
+                                <i class="fas fa-exclamation-triangle"></i>
+                            </div>
+                            <h4>Fake News Examples</h4>
+                            <p>Sample misleading and sensational content patterns</p>
+                        </div>
+                        <div class="template-card" onclick="loadSampleData('real')">
+                            <div class="template-icon">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                            <h4>Real News Examples</h4>
+                            <p>Sample credible and well-sourced news content</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Results Section -->
+            <section class="results-section" id="results-section" style="display: none;">
+                <div class="card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-chart-bar"></i> Bulk Analysis Results</h2>
+                        <div class="analysis-meta">
+                            <span id="analysis-time"></span>
+                            <span id="items-analyzed"></span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <!-- Summary Stats -->
+                        <div class="summary-stats">
+                            <div class="stat-card total">
+                                <div class="stat-icon">
+                                    <i class="fas fa-file-alt"></i>
+                                </div>
+                                <div class="stat-content">
+                                    <div class="stat-number" id="stat-total">0</div>
+                                    <div class="stat-label">Total Analyzed</div>
+                                </div>
+                            </div>
+                            <div class="stat-card real">
+                                <div class="stat-icon">
+                                    <i class="fas fa-check-circle"></i>
+                                </div>
+                                <div class="stat-content">
+                                    <div class="stat-number" id="stat-real">0</div>
+                                    <div class="stat-label">Real News</div>
+                                </div>
+                            </div>
+                            <div class="stat-card fake">
+                                <div class="stat-icon">
+                                    <i class="fas fa-times-circle"></i>
+                                </div>
+                                <div class="stat-content">
+                                    <div class="stat-number" id="stat-fake">0</div>
+                                    <div class="stat-label">Fake News</div>
+                                </div>
+                            </div>
+                            <div class="stat-card accuracy">
+                                <div class="stat-icon">
+                                    <i class="fas fa-bullseye"></i>
+                                </div>
+                                <div class="stat-content">
+                                    <div class="stat-number" id="stat-accuracy">0%</div>
+                                    <div class="stat-label">Avg Confidence</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Results Grid -->
+                        <div class="results-grid" id="results-grid">
+                            <!-- Results will be populated here -->
+                        </div>
+
+                        <!-- Export Section -->
+                        <div class="export-section">
+                            <h4>Export Results</h4>
+                            <div class="export-actions">
+                                <button class="btn btn-outline" onclick="exportResults('json')">
+                                    <i class="fas fa-file-code"></i> JSON
+                                </button>
+                                <button class="btn btn-outline" onclick="exportResults('csv')">
+                                    <i class="fas fa-file-csv"></i> CSV
+                                </button>
+                                <button class="btn btn-outline" onclick="exportResults('pdf')">
+                                    <i class="fas fa-file-pdf"></i> PDF Report
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loading-overlay" style="display: none;">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <h3>Processing Bulk Analysis</h3>
+            <p>Analyzing <span id="loading-count">0</span> news items...</p>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/bulk.js') }}"></script>
+</body>
+</html>
