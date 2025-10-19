@@ -1,4 +1,4 @@
-// Enhanced Chatbot functionality with API integration
+// Enhanced Chatbot functionality with better link handling
 class NewsChatbot {
     constructor() {
         this.isOpen = false;
@@ -88,16 +88,19 @@ class NewsChatbot {
         this.showTypingIndicator();
 
         try {
-            // Try to get response from backend API first
+            // Get response from backend API
             const apiResponse = await this.getAPIResponse(message);
             
             this.removeTypingIndicator();
             
             if (apiResponse && apiResponse.success) {
                 this.addMessage(apiResponse.response, 'bot');
-                // Update suggestions based on API response
+                
+                // Update suggestions based on API response type
                 if (apiResponse.suggestions) {
                     setTimeout(() => this.addSuggestionChips(apiResponse.suggestions), 500);
+                } else {
+                    setTimeout(() => this.addSuggestionChips(), 500);
                 }
             } else {
                 // Fallback to local response
@@ -153,28 +156,47 @@ class NewsChatbot {
     }
 
     formatText(text) {
+        if (!text) return '';
+        
         // Convert line breaks to <br> tags
         let formatted = text.replace(/\n/g, '<br>');
         
-        // Convert markdown-style links to HTML links
+        // Convert markdown-style links to HTML links - FIXED REGEX
         formatted = formatted.replace(
-            /• \[([^\]]+)\]\(([^)]+)\)/g, 
-            '• <a href="$2" target="_blank" class="news-link">$1</a>'
+            /\[([^\]]+)\]\(([^)]+)\)/g, 
+            '<a href="$2" target="_blank" rel="noopener noreferrer" class="news-link">$1</a>'
         );
 
-        // Convert plain text links to HTML links
+        // Convert numbered list with links - FIXED REGEX
         formatted = formatted.replace(
-            /(https?:\/\/[^\s]+)/g,
-            '<a href="$1" target="_blank" class="news-link">$1</a>'
+            /(\d+)\.\s*<a href="([^"]+)"[^>]*>([^<]+)<\/a>/g,
+            '$1. <a href="$2" target="_blank" rel="noopener noreferrer" class="news-link">$3</a>'
+        );
+
+        // Convert plain text links to HTML links (http/https only) - FIXED
+        formatted = formatted.replace(
+            /(https?:\/\/[^\s<]+[a-zA-Z0-9])/g,
+            '<a href="$1" target="_blank" rel="noopener noreferrer" class="news-link">$1</a>'
         );
 
         // Add TruthGuard feature links
         formatted = formatted.replace(/Single Check/g, '<a href="/single" class="feature-link">Single Check</a>');
+        formatted = formatted.replace(/Single Article Check/g, '<a href="/single" class="feature-link">Single Article Check</a>');
         formatted = formatted.replace(/Bulk Verification/g, '<a href="/bulk" class="feature-link">Bulk Verification</a>');
+        formatted = formatted.replace(/Bulk Check/g, '<a href="/bulk" class="feature-link">Bulk Check</a>');
         formatted = formatted.replace(/Image Analysis/g, '<a href="/image" class="feature-link">Image Analysis</a>');
         formatted = formatted.replace(/File Upload/g, '<a href="/file" class="feature-link">File Upload</a>');
-        formatted = formatted.replace(/Single Article Check/g, '<a href="/single" class="feature-link">Single Article Check</a>');
-        formatted = formatted.replace(/Bulk Check/g, '<a href="/bulk" class="feature-link">Bulk Check</a>');
+        
+        // Format bold text (**text**)
+        formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        
+        // Format emojis and icons
+        formatted = formatted.replace(/💡/g, '<i class="fas fa-lightbulb text-yellow-500"></i>');
+        formatted = formatted.replace(/📰/g, '<i class="fas fa-newspaper text-blue-500"></i>');
+        formatted = formatted.replace(/⚽/g, '<i class="fas fa-baseball-ball text-green-500"></i>');
+        formatted = formatted.replace(/💻/g, '<i class="fas fa-laptop text-purple-500"></i>');
+        formatted = formatted.replace(/🤖/g, '<i class="fas fa-robot text-indigo-500"></i>');
+        formatted = formatted.replace(/🛡️/g, '<i class="fas fa-shield-alt text-green-500"></i>');
         
         return formatted;
     }
@@ -189,6 +211,7 @@ class NewsChatbot {
                 <div class="typing-dot"></div>
                 <div class="typing-dot"></div>
             </div>
+            <span class="typing-text">TruthGuard AI is thinking...</span>
         `;
         this.messagesContainer.appendChild(typingDiv);
         this.scrollToBottom();
@@ -206,7 +229,6 @@ class NewsChatbot {
     }
 
     addWelcomeMessage() {
-        // Welcome message is already in HTML, just ensure it's properly formatted
         const welcomeMessage = this.messagesContainer.querySelector('.bot-message');
         if (welcomeMessage) {
             welcomeMessage.innerHTML = this.formatText(welcomeMessage.textContent);
@@ -214,17 +236,16 @@ class NewsChatbot {
     }
 
     addSuggestionChips(customSuggestions = null) {
-        // Remove existing suggestion chips
         const existingChips = this.messagesContainer.querySelector('.suggestion-chips');
         if (existingChips) {
             existingChips.remove();
         }
 
         const suggestions = customSuggestions || [
-            "Trending sports news",
-            "Latest tech news",
-            "How to verify news",
-            "TruthGuard features"
+            "Latest news",
+            "Sports updates", 
+            "Tech news",
+            "How to verify news"
         ];
 
         const chipsContainer = document.createElement('div');
@@ -248,47 +269,26 @@ class NewsChatbot {
     generateResponse(userMessage) {
         const lowerMessage = userMessage.toLowerCase();
         
-        // News-related queries
+        // News-related queries (fallback when API fails)
         if (lowerMessage.includes('trending') || lowerMessage.includes('top news') || 
             lowerMessage.includes('latest news') || lowerMessage.includes('current news')) {
             
-            if (lowerMessage.includes('sports') || lowerMessage.includes('sport')) {
-                return `Here are some trending sports news sources:
-• [ESPN: Latest Sports Updates](https://www.espn.com/)
-• [Sky Sports: Breaking Sports News](https://www.skysports.com/)
-• [BBC Sport: Top Stories](https://www.bbc.com/sport)
-• [Guardian Sports News](https://www.theguardian.com/international/sport)
-• [CBS Sports Headlines](https://www.cbssports.com/)
+            return `I'm currently unable to fetch live news, but here are reliable sources for current news:
 
-Remember to verify any suspicious sports news using our Single Check feature!`;
-            } else if (lowerMessage.includes('technology') || lowerMessage.includes('tech')) {
-                return `Here are trending technology news sources:
-• [TechCrunch: Latest Tech News](https://techcrunch.com/)
-• [The Verge: Technology](https://www.theverge.com/tech)
-• [Wired: Tech Section](https://www.wired.com/category/technology/)
-• [Engadget: Tech Updates](https://www.engadget.com/)
-• [Ars Technica: Tech News](https://arstechnica.com/technology/)
+📰 **General News:**
+• <a href="https://www.bbc.com/news" target="_blank" class="news-link">BBC News</a> - Comprehensive world news
+• <a href="https://www.reuters.com" target="_blank" class="news-link">Reuters</a> - Fact-based reporting
+• <a href="https://apnews.com" target="_blank" class="news-link">Associated Press</a> - Breaking news
 
-Verify tech news authenticity with our AI Detection tool.`;
-            } else if (lowerMessage.includes('politics') || lowerMessage.includes('political')) {
-                return `Here are reliable political news sources:
-• [Reuters Politics](https://www.reuters.com/news/politics)
-• [BBC Politics](https://www.bbc.com/news/politics)
-• [Politico: Political News](https://www.politico.com/)
-• [Guardian Politics](https://www.theguardian.com/politics)
-• [NY Times Politics](https://www.nytimes.com/section/politics)
+⚽ **Sports:**
+• <a href="https://www.espn.com" target="_blank" class="news-link">ESPN</a> - Live scores and news
+• <a href="https://www.bbc.com/sport" target="_blank" class="news-link">BBC Sport</a> - Global sports coverage
 
-Political news often requires careful verification. Use our Bulk Check for multiple sources.`;
-            } else {
-                return `Here are some general trending news sources:
-• [BBC News: Top Stories](https://www.bbc.com/news)
-• [Reuters: World News](https://www.reuters.com/)
-• [The Guardian: International](https://www.theguardian.com/international)
-• [CNN: Breaking News](https://www.cnn.com/)
-• [Associated Press](https://apnews.com/)
+💻 **Technology:**
+• <a href="https://techcrunch.com" target="_blank" class="news-link">TechCrunch</a> - Startup and tech news
+• <a href="https://www.theverge.com" target="_blank" class="news-link">The Verge</a> - Tech and culture
 
-You can verify any news article using our Single Check feature!`;
-            }
+You can verify any news article using our <a href="/single" class="feature-link">Single Check</a> feature!`;
         }
         
         // Fake/real news verification queries
@@ -296,12 +296,12 @@ You can verify any news article using our Single Check feature!`;
             lowerMessage.includes('verify') || lowerMessage.includes('check') || 
             lowerMessage.includes('authentic') || lowerMessage.includes('true')) {
             
-            return `I can help you verify news authenticity! Here are your options:
+            return `I can help you verify news authenticity! TruthGuard offers:
 
-• Single Article Check: Verify one news article at a time with detailed analysis
-• Bulk Verification: Check multiple articles simultaneously
-• Image Analysis: Extract and verify text from news screenshots
-• File Upload: Upload files containing multiple articles
+• <strong>Single Article Check</strong>: Verify one news article with detailed analysis
+• <strong>Bulk Verification</strong>: Check multiple articles simultaneously  
+• <strong>Image Analysis</strong>: Extract and verify text from news screenshots
+• <strong>File Upload</strong>: Upload files containing multiple articles
 
 Our AI analyzes linguistic patterns with 95% accuracy! Try our verification features to ensure news authenticity.`;
         }
@@ -313,10 +313,10 @@ Our AI analyzes linguistic patterns with 95% accuracy! Try our verification feat
             
             return `TruthGuard offers several powerful features for news verification:
 
-• Single Article Analysis: Check individual news articles with detailed analysis
-• Bulk Verification: Process multiple news items at once
-• Image OCR Analysis: Extract and verify text from news screenshots
-• File Upload: Upload CSV or text files for batch processing
+• <strong>Single Article Analysis</strong>: Check individual news articles with detailed analysis
+• <strong>Bulk Verification</strong>: Process multiple news items at once
+• <strong>Image OCR Analysis</strong>: Extract and verify text from news screenshots  
+• <strong>File Upload</strong>: Upload CSV or text files for batch processing
 
 All features use our advanced AI with 95% accuracy for detecting fake news!`;
         }
@@ -324,32 +324,32 @@ All features use our advanced AI with 95% accuracy for detecting fake news!`;
         // Greetings
         if (lowerMessage.includes('hello') || lowerMessage.includes('hi') || 
             lowerMessage.includes('hey') || lowerMessage.includes('greetings')) {
-            return "Hello! I'm your News Assistant. I can help you find trending news or guide you on how to verify news authenticity using TruthGuard's features. What would you like to know?";
+            return "Hello! I'm your TruthGuard News Assistant. I can help you find news information or guide you on how to verify news authenticity using our AI features. What would you like to know?";
         }
 
         // Thank you responses
         if (lowerMessage.includes('thank') || lowerMessage.includes('thanks')) {
-            return "You're welcome! If you have any more questions about news or need help verifying articles, feel free to ask. Remember to use our verification features for any suspicious news!";
+            return "You're welcome! If you have any more questions about news verification or need help with our features, feel free to ask. Stay informed and verify suspicious news! 🛡️";
         }
 
         // Goodbye responses
         if (lowerMessage.includes('bye') || lowerMessage.includes('goodbye') || lowerMessage.includes('see you')) {
-            return "Goodbye! Don't forget to verify any questionable news using TruthGuard's features. Stay informed and stay safe!";
+            return "Goodbye! Remember to verify any questionable news using TruthGuard's features. Stay informed and stay safe! 🛡️";
         }
         
         // Default response for non-news queries
         if (!this.isNewsRelated(lowerMessage)) {
-            return "I'm specialized in news-related queries and TruthGuard features. I can help you with trending news topics or guide you on how to verify news authenticity. Please ask me about news or our verification features!";
+            return "I'm specialized in news-related queries and TruthGuard features. I can help you with news information or guide you on how to verify news authenticity. Please ask me about news verification or our features!";
         }
         
         // Default response for news-related queries not covered above
         return `I understand you're asking about news. I can help you with:
-• Finding trending news in specific categories (sports, tech, politics, etc.)
-• Guiding you on how to verify news authenticity
+• Finding news information and reliable sources
+• Guiding you on how to verify news authenticity  
 • Explaining TruthGuard's features for news verification
 
-Could you be more specific about what you're looking for? For example, you could ask:
-"What are the top trending sports news?"
+Could you be more specific about what you're looking for? For example:
+"Latest sports news"
 "How can I check if a news article is fake?"
 "What features does TruthGuard offer?"`;
     }
@@ -367,14 +367,12 @@ Could you be more specific about what you're looking for? For example, you could
         return newsKeywords.some(keyword => message.includes(keyword));
     }
 
-    // Utility method to clear chat history
     clearChat() {
         this.messagesContainer.innerHTML = '';
         this.addWelcomeMessage();
         this.addSuggestionChips();
     }
 
-    // Method to handle errors gracefully
     handleError(error) {
         console.error('Chatbot error:', error);
         this.addMessage("I'm having trouble processing your request. Please try again or check your connection.", 'bot');
@@ -386,17 +384,16 @@ document.addEventListener('DOMContentLoaded', function() {
     try {
         window.newsChatbot = new NewsChatbot();
         console.log('✅ News Chatbot initialized successfully');
+        
     } catch (error) {
         console.error('❌ Failed to initialize News Chatbot:', error);
     }
 });
 
-// Add global error handler for uncaught errors
 window.addEventListener('error', function(e) {
     console.error('Global error in chatbot:', e.error);
 });
 
-// Export for module usage if needed
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = NewsChatbot;
 }

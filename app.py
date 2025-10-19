@@ -7,28 +7,27 @@ from datetime import datetime
 import logging
 import re
 import google.generativeai as genai
+import requests
 from dotenv import load_dotenv
 
 # -------------------------
-# ✅ FIXED ENV LOADING LOGIC
+# ✅ PROPER ENV LOADING
 # -------------------------
 
 # Get current directory (where this file is)
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
-# First load from project root .env (one directory above if running from /models or /app)
-project_root = os.path.dirname(current_dir)
-env_root_path = os.path.join(project_root, ".env")
-env_local_path = os.path.join(current_dir, ".env.local")
+# Load from current directory first, then parent
+env_paths = [
+    os.path.join(current_dir, '.env'),
+    os.path.join(current_dir, '.env.local'),
+    os.path.join(os.path.dirname(current_dir), '.env'),
+]
 
-# Load both, preferring .env.local if available
-if os.path.exists(env_root_path):
-    load_dotenv(env_root_path)
-if os.path.exists(env_local_path):
-    load_dotenv(env_local_path)
-
-# Confirm load
-print(f"✅ Loaded environment from: {env_local_path if os.path.exists(env_local_path) else env_root_path}")
+for env_path in env_paths:
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
+        print(f"✅ Loaded environment from: {env_path}")
 
 # -------------------------
 # Directory checks
@@ -42,12 +41,6 @@ if os.path.exists(models_dir):
     print("✅ Models directory exists")
     files_in_models = os.listdir(models_dir)
     print(f"📁 Files in models: {files_in_models}")
-    
-    ocr_path = os.path.join(models_dir, 'ocr.py')
-    if os.path.exists(ocr_path):
-        print("✅ ocr.py exists in models directory")
-    else:
-        print("❌ ocr.py NOT found in models directory")
 else:
     print("❌ Models directory does not exist")
 
@@ -86,6 +79,237 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
 
 analysis_history = []
 
+# -------------------------
+# ✅ API Configuration with DEBUG
+# -------------------------
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+NEWS_API_KEY = os.getenv("NEWS_API_KEY")
+
+print(f"🔑 GEMINI_API_KEY: {'✅ LOADED' if GEMINI_API_KEY else '❌ NOT FOUND'}")
+print(f"🔑 NEWS_API_KEY: {'✅ LOADED' if NEWS_API_KEY else '❌ NOT FOUND'}")
+
+# List all environment variables for debugging
+print("🔍 All environment variables:")
+for key, value in os.environ.items():
+    if any(api_key in key.lower() for api_key in ['gemini', 'news', 'api']):
+        masked_value = value[:4] + '***' + value[-4:] if value else 'None'
+        print(f"   {key}: {masked_value}")
+
+# Configure Gemini
+try:
+    if GEMINI_API_KEY:
+        genai.configure(api_key=GEMINI_API_KEY)
+        gemini_model = genai.GenerativeModel('gemini-pro')
+        GEMINI_AVAILABLE = True
+        print("✅ Gemini API configured successfully")
+    else:
+        GEMINI_AVAILABLE = False
+        gemini_model = None
+        print("⚠️ Gemini API key not found - check your .env file")
+except Exception as e:
+    logger.error(f"❌ Gemini API configuration failed: {e}")
+    GEMINI_AVAILABLE = False
+    gemini_model = None
+
+# -------------------------
+# Utility Functions
+# -------------------------
+def is_news_query(message):
+    """Check if the user is asking for current news"""
+    message_lower = message.lower()
+    news_keywords = [
+        'news', 'headlines', 'latest', 'current', 'trending', 'breaking',
+        'sports news', 'tech news', 'technology news', 'politics news', 
+        'business news', 'entertainment news', 'health news', 'science news',
+        'what\'s happening', 'today news', 'recent news', 'top stories',
+        'update', 'headline', 'world news'
+    ]
+    return any(keyword in message_lower for keyword in news_keywords)
+
+def fetch_real_news(user_query):
+    """Fetch real news from NewsAPI with proper error handling"""
+    if not NEWS_API_KEY:
+        logger.warning("❌ NewsAPI key not available")
+        return None
+    
+    try:
+        user_query_lower = user_query.lower()
+        
+        # Map user query to NewsAPI category
+        category_map = {
+            'sports': 'sports',
+            'sport': 'sports',
+            'technology': 'technology', 
+            'tech': 'technology',
+            'business': 'business',
+            'finance': 'business',
+            'entertainment': 'entertainment',
+            'movie': 'entertainment',
+            'health': 'health',
+            'science': 'science',
+            'politics': 'general',
+            'world': 'general',
+            'national': 'general'
+        }
+        
+        category = 'general'
+        query_terms = []
+        
+        for key, value in category_map.items():
+            if key in user_query_lower:
+                category = value
+                query_terms.append(key)
+                break
+        
+        # If no specific category found, try a general search
+        if category == 'general' and len(user_query.split()) > 1:
+            # Use everything API for better results
+            url = f"https://newsapi.org/v2/everything?q={user_query}&sortBy=publishedAt&pageSize=5&apiKey={NEWS_API_KEY}"
+        else:
+            # Use top headlines for categories
+            url = f"https://newsapi.org/v2/top-headlines?category={category}&country=us&pageSize=5&apiKey={NEWS_API_KEY}"
+        
+        logger.info(f"📰 Fetching news from: {url.replace(NEWS_API_KEY, 'API_KEY_REDACTED')}")
+        
+        response = requests.get(url, timeout=15)
+        
+        if response.status_code == 200:
+            data = response.json()
+            articles = data.get('articles', [])
+            logger.info(f"✅ NewsAPI returned {len(articles)} articles")
+            
+            # Filter valid articles
+            valid_articles = []
+            for article in articles:
+                if (article.get('title') and 
+                    article.get('title') != '[Removed]' and 
+                    article.get('url') and
+                    article.get('url').startswith('http')):
+                    valid_articles.append(article)
+            
+            logger.info(f"✅ Found {len(valid_articles)} valid articles")
+            data['articles'] = valid_articles
+            return data
+        else:
+            logger.warning(f"❌ NewsAPI request failed: {response.status_code} - {response.text}")
+            return None
+            
+    except requests.exceptions.Timeout:
+        logger.error("❌ NewsAPI request timed out")
+        return None
+    except Exception as e:
+        logger.error(f"❌ Error fetching from NewsAPI: {e}")
+        return None
+
+def format_news_response(news_data, user_query):
+    """Format real news data into a nice response"""
+    articles = news_data.get('articles', [])
+    
+    if not articles:
+        return "I couldn't fetch current news right now. Please check reliable sources like BBC News, Reuters, or Associated Press directly."
+    
+    response = "Here are the latest news headlines"
+    
+    # Add category context
+    if 'sports' in user_query.lower():
+        response += " in sports"
+    elif 'tech' in user_query.lower():
+        response += " in technology"
+    elif 'business' in user_query.lower():
+        response += " in business"
+    elif 'entertainment' in user_query.lower():
+        response += " in entertainment"
+    
+    response += ":\n\n"
+    
+    for i, article in enumerate(articles[:5], 1):
+        title = article.get('title', 'No title').strip()
+        source = article.get('source', {}).get('name', 'Unknown source')
+        url = article.get('url', '#')
+        description = article.get('description', '')
+        
+        # Clean and truncate title
+        title = re.sub(r'\s+', ' ', title)
+        if len(title) > 80:
+            title = title[:77] + "..."
+            
+        # Use description if available, otherwise just title and source
+        if description and len(description) > 10:
+            response += f"{i}. **{title}**\n   {description}\n   Source: *{source}*\n   [Read more]({url})\n\n"
+        else:
+            response += f"{i}. **{title}**\n   Source: *{source}*\n   [Read more]({url})\n\n"
+    
+    response += "💡 **Remember**: You can verify any suspicious news using our Single Check feature!"
+    return response
+
+def create_chatbot_prompt(user_message):
+    """Create a smart prompt for Gemini"""
+    return f"""You are TruthGuard AI, a helpful assistant for news verification and reliable information.
+
+User asked: "{user_message}"
+
+Guidelines:
+- Be helpful, accurate, and conversational
+- If discussing news, emphasize verification and reliable sources
+- Recommend trusted sources like BBC, Reuters, AP News, TechCrunch, ESPN
+- Explain how to use TruthGuard features for verification
+- Don't invent or hallucinate news stories
+- If unsure about current events, suggest using our verification tools
+- Keep responses concise but informative (2-4 paragraphs max)
+
+Provide a helpful response:"""
+
+def get_news_suggestions(user_query):
+    """Get relevant suggestions based on news query"""
+    user_query_lower = user_query.lower()
+    
+    if 'sports' in user_query_lower:
+        return ["Latest sports scores", "Sports news", "Verify sports article", "ESPN updates"]
+    elif 'tech' in user_query_lower:
+        return ["Tech news", "Latest gadgets", "Verify tech news", "AI updates"]
+    elif 'business' in user_query_lower:
+        return ["Business news", "Stock updates", "Verify business news", "Market trends"]
+    else:
+        return ["Sports news", "Tech updates", "Business headlines", "Verify news article"]
+
+def get_general_suggestions():
+    """Get general suggestions"""
+    return ["Verify news article", "TruthGuard features", "Spot fake news", "Reliable sources"]
+
+def get_fallback_response(user_message):
+    """Fallback when both APIs are unavailable"""
+    if is_news_query(user_message):
+        return """I currently can't fetch live news updates, but here are reliable sources for current news:
+
+📰 **Trusted News Sources:**
+• BBC News (https://www.bbc.com/news) - Comprehensive world news
+• Reuters (https://www.reuters.com) - Fact-based reporting  
+• Associated Press (https://apnews.com) - Breaking news
+• The Guardian (https://www.theguardian.com/international) - International coverage
+
+⚽ **Sports:**
+• ESPN (https://www.espn.com) - Live scores and news
+• BBC Sport (https://www.bbc.com/sport) - Global sports coverage
+
+💻 **Technology:**
+• TechCrunch (https://techcrunch.com) - Startup and tech news
+• The Verge (https://www.theverge.com) - Tech and culture
+
+You can copy any news article into our Single Check feature to verify its authenticity!"""
+    else:
+        return """Hello! I'm TruthGuard AI, your assistant for news verification. I can help you with:
+
+• Verifying news articles using our AI tools
+• Guidance on spotting fake news and misinformation
+• Information about TruthGuard features
+• Recommendations for reliable news sources
+• Tips for responsible news consumption
+
+What would you like to know about? You can ask me about news verification, reliable sources, or use our tools to check specific articles!"""
+
+# -------------------------
+# Flask Routes (Keep existing routes the same)
+# -------------------------
 @app.route('/')
 def landing():
     return render_template('landing.html')
@@ -313,48 +537,72 @@ def generate_word_analysis(text):
     return detected_fake, detected_real
 
 # -------------------------
-# ✅ Gemini API Config (Fixed)
-# -------------------------
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
-print(f"🔑 GEMINI_API_KEY loaded: {bool(GEMINI_API_KEY)}")
-
-try:
-    genai.configure(api_key=GEMINI_API_KEY)
-    gemini_model = genai.GenerativeModel('gemini-pro')
-    GEMINI_AVAILABLE = True
-    print("✅ Gemini API configured successfully")
-except Exception as e:
-    logger.error(f"❌ Gemini API configuration failed: {e}")
-    GEMINI_AVAILABLE = False
-    gemini_model = None
-
-# -------------------------
-# Chatbot
+# Enhanced Chatbot Route
 # -------------------------
 @app.route('/api/chatbot', methods=['POST'])
 def chatbot():
     try:
         data = request.json
         user_message = data.get('message', '').strip()
+        
         if not user_message:
             return jsonify({'success': False, 'error': 'No message provided'})
         
         logger.info(f"🤖 Chatbot query: {user_message}")
         
+        # Check if it's a news request
+        if is_news_query(user_message) and NEWS_API_KEY:
+            # Try to fetch real news from NewsAPI
+            logger.info("🔄 Attempting to fetch news from NewsAPI...")
+            news_data = fetch_real_news(user_message)
+            if news_data and news_data.get('articles'):
+                logger.info("✅ Using NewsAPI for news response")
+                return jsonify({
+                    'success': True,
+                    'response': format_news_response(news_data, user_message),
+                    'type': 'news',
+                    'suggestions': get_news_suggestions(user_message)
+                })
+            else:
+                logger.info("⚠️ NewsAPI failed or no articles found")
+        
+        # For non-news queries or if NewsAPI fails, use Gemini
         if GEMINI_AVAILABLE:
-            prompt = f"You are TruthGuard AI assistant. Respond to: {user_message}"
-            response = gemini_model.generate_content(prompt)
-            return jsonify({'success': True, 'response': response.text})
-        else:
-            return jsonify({'success': True, 'response': "Gemini API not available. Please set GEMINI_API_KEY."})
+            try:
+                prompt = create_chatbot_prompt(user_message)
+                response = gemini_model.generate_content(prompt)
+                logger.info("✅ Using Gemini for response")
+                
+                return jsonify({
+                    'success': True,
+                    'response': response.text,
+                    'type': 'general',
+                    'suggestions': get_general_suggestions()
+                })
+            except Exception as e:
+                logger.error(f"❌ Gemini API error: {e}")
+                # Fall through to fallback response
+        
+        # Fallback response
+        logger.info("⚠️ Using fallback response")
+        return jsonify({
+            'success': True,
+            'response': get_fallback_response(user_message),
+            'type': 'fallback',
+            'suggestions': get_general_suggestions()
+        })
+            
     except Exception as e:
-        logger.error(f"Error in chatbot: {str(e)}")
-        return jsonify({'success': False, 'error': 'Error in chatbot.'}), 500
+        logger.error(f"❌ Error in chatbot: {str(e)}")
+        return jsonify({
+            'success': False, 
+            'error': 'Sorry, I encountered an error. Please try again.'
+        }), 500
 
 if __name__ == '__main__':
     print("🚀 AI Fake News Detection System starting...")
     print("✅ Enhanced UI with 5-page structure")
     print("📊 Visit http://localhost:5000 to use the application")
     print("📝 Features: Single Check, Bulk Analysis, Image OCR, File Upload")
+    print("🤖 Chatbot: Integrated Gemini + NewsAPI")
     app.run(debug=True, host='0.0.0.0', port=5000)
