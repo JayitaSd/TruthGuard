@@ -1,2 +1,3 @@
 venv/
 mpr_2025.zip:Zone.Identifier
+.env.local

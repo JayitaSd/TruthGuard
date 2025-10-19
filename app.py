@@ -6,15 +6,38 @@ import json
 from datetime import datetime
 import logging
 import re
+import google.generativeai as genai
+from dotenv import load_dotenv
 
+# -------------------------
+# ✅ FIXED ENV LOADING LOGIC
+# -------------------------
 
+# Get current directory (where this file is)
 current_dir = os.path.dirname(os.path.abspath(__file__))
+
+# First load from project root .env (one directory above if running from /models or /app)
+project_root = os.path.dirname(current_dir)
+env_root_path = os.path.join(project_root, ".env")
+env_local_path = os.path.join(current_dir, ".env.local")
+
+# Load both, preferring .env.local if available
+if os.path.exists(env_root_path):
+    load_dotenv(env_root_path)
+if os.path.exists(env_local_path):
+    load_dotenv(env_local_path)
+
+# Confirm load
+print(f"✅ Loaded environment from: {env_local_path if os.path.exists(env_local_path) else env_root_path}")
+
+# -------------------------
+# Directory checks
+# -------------------------
 models_dir = os.path.join(current_dir, 'models')
 
 print(f"🔍 Current directory: {current_dir}")
 print(f"🔍 Models directory: {models_dir}")
 
-# Check if models directory and ocr.py exist
 if os.path.exists(models_dir):
     print("✅ Models directory exists")
     files_in_models = os.listdir(models_dir)
@@ -28,16 +51,18 @@ if os.path.exists(models_dir):
 else:
     print("❌ Models directory does not exist")
 
-
-
-# Configure logging
+# -------------------------
+# Logging
+# -------------------------
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Add models directory to Python path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'models'))
+# Add models directory to path
+sys.path.append(models_dir)
 
-# Import functions from your ocr.py
+# -------------------------
+# Import OCR Functions
+# -------------------------
 try:
     from models import ocr
     from models.ocr import check_news, clean_text
@@ -46,17 +71,19 @@ try:
 except ImportError as e:
     logger.error(f"❌ Error importing from ocr.py: {e}")
     
-    # Fallback functions
     def check_news(text):
         return "❌ Fake News (Confidence: 85.00%)"
     
     def clean_text(text):
         return text.lower().strip()
     print("⚠️ Using fallback functions")
-app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
-# Store analysis history (in production, use a database)
+# -------------------------
+# Flask App
+# -------------------------
+app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
+
 analysis_history = []
 
 @app.route('/')
@@ -86,17 +113,11 @@ def predict():
         news_text = data.get('text', '')
         
         if not news_text.strip():
-            return jsonify({
-                'success': False,
-                'error': 'Please enter some text to analyze'
-            })
+            return jsonify({'success': False, 'error': 'Please enter some text to analyze'})
         
         logger.info(f"🔍 Analyzing single news text (length: {len(news_text)})")
-        
-        # Use your existing check_news function from ocr.py
         result_text = check_news(news_text)
         
-        # Parse the result text to extract prediction and confidence
         if 'Real News' in result_text:
             prediction = 'real'
             emoji = '✅'
@@ -104,15 +125,11 @@ def predict():
             prediction = 'fake'
             emoji = '❌'
         
-        # Extract confidence from result text
-        import re
         confidence_match = re.search(r'Confidence:\s*([\d.]+)%', result_text)
         confidence = float(confidence_match.group(1)) / 100 if confidence_match else 0.85
         
-        # Generate enhanced word analysis
         fake_words, real_words = generate_word_analysis(news_text)
         
-        # Store in history
         analysis_history.append({
             'type': 'single',
             'text': news_text[:100] + '...' if len(news_text) > 100 else news_text,
@@ -135,10 +152,7 @@ def predict():
         
     except Exception as e:
         logger.error(f"Error in predict: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': 'Internal server error. Please try again.'
-        }), 500
+        return jsonify({'success': False, 'error': 'Internal server error. Please try again.'}), 500
 
 @app.route('/api/predict-bulk', methods=['POST'])
 def predict_bulk():
@@ -147,10 +161,7 @@ def predict_bulk():
         news_items = data.get('items', [])
         
         if not news_items:
-            return jsonify({
-                'success': False,
-                'error': 'No news items provided'
-            })
+            return jsonify({'success': False, 'error': 'No news items provided'})
         
         logger.info(f"📊 Analyzing {len(news_items)} bulk news items")
         
@@ -166,7 +177,6 @@ def predict_bulk():
                     prediction = 'fake'
                     emoji = '❌'
                 
-                import re
                 confidence_match = re.search(r'Confidence:\s*([\d.]+)%', result_text)
                 confidence = float(confidence_match.group(1)) / 100 if confidence_match else 0.85
                 
@@ -183,7 +193,6 @@ def predict_bulk():
                     'fullResult': result_text
                 })
         
-        # Store bulk analysis in history
         analysis_history.append({
             'type': 'bulk',
             'count': len(results),
@@ -203,52 +212,34 @@ def predict_bulk():
         
     except Exception as e:
         logger.error(f"Error in predict-bulk: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': 'Internal server error. Please try again.'
-        }), 500
+        return jsonify({'success': False, 'error': 'Internal server error. Please try again.'}), 500
 
 @app.route('/api/process-image', methods=['POST'])
 def process_image():
     try:
         if 'image' not in request.files:
-            return jsonify({
-                'success': False,
-                'error': 'No image file provided'
-            })
+            return jsonify({'success': False, 'error': 'No image file provided'})
         
         image_file = request.files['image']
-        
         if image_file.filename == '':
-            return jsonify({
-                'success': False,
-                'error': 'No image selected'
-            })
+            return jsonify({'success': False, 'error': 'No image selected'})
         
-        # Validate file type
         allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
         if '.' not in image_file.filename or \
            image_file.filename.rsplit('.', 1)[1].lower() not in allowed_extensions:
-            return jsonify({
-                'success': False,
-                'error': 'Invalid file type. Please upload an image (PNG, JPG, JPEG, GIF, BMP)'
-            })
+            return jsonify({'success': False, 'error': 'Invalid file type.'})
         
         logger.info(f"📷 Processing image: {image_file.filename}")
         
-        # Save uploaded image to temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_file:
             image_file.save(temp_file.name)
             temp_path = temp_file.name
         
         try:
-            # Extract text using OCR
             extracted_text = extract_text_with_ocr(temp_path)
             
-            # Analyze the extracted text
             if extracted_text and "No text could be extracted" not in extracted_text:
                 result_text = check_news(extracted_text)
-                
                 if 'Real News' in result_text:
                     prediction = 'real'
                     emoji = '✅'
@@ -256,10 +247,8 @@ def process_image():
                     prediction = 'fake'
                     emoji = '❌'
                 
-                import re
                 confidence_match = re.search(r'Confidence:\s*([\d.]+)%', result_text)
                 confidence = float(confidence_match.group(1)) / 100 if confidence_match else 0.85
-                
                 fake_words, real_words = generate_word_analysis(extracted_text)
             else:
                 prediction = 'error'
@@ -268,12 +257,9 @@ def process_image():
                 fake_words = []
                 real_words = []
                 result_text = "No text could be extracted"
-                
         finally:
-            # Clean up temporary file
             os.unlink(temp_path)
         
-        # Store image analysis in history
         analysis_history.append({
             'type': 'image',
             'filename': image_file.filename,
@@ -295,218 +281,80 @@ def process_image():
         
     except Exception as e:
         logger.error(f"Error in process-image: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': 'Error processing image. Please try again.'
-        }), 500
-
-@app.route('/api/process-file', methods=['POST'])
-def process_file():
-    try:
-        if 'file' not in request.files:
-            return jsonify({
-                'success': False,
-                'error': 'No file provided'
-            })
-        
-        file = request.files['file']
-        
-        if file.filename == '':
-            return jsonify({
-                'success': False,
-                'error': 'No file selected'
-            })
-        
-        allowed_extensions = {'txt', 'csv'}
-        if '.' not in file.filename or \
-           file.filename.rsplit('.', 1)[1].lower() not in allowed_extensions:
-            return jsonify({
-                'success': False,
-                'error': 'Invalid file type. Please upload TXT or CSV files only.'
-            })
-        
-        logger.info(f"📁 Processing file: {file.filename}")
-        
-        # Read file content
-        content = file.read().decode('utf-8')
-        
-        # Parse based on file type
-        if file.filename.endswith('.txt'):
-            news_items = parse_txt_file(content)
-        else:  # CSV
-            news_items = parse_csv_file(content)
-        
-        if not news_items:
-            return jsonify({
-                'success': False,
-                'error': 'No valid news items found in the file.'
-            })
-        
-        # Process each news item (limit to 20 for performance)
-        news_items = news_items[:20]
-        results = []
-        
-        for i, item in enumerate(news_items):
-            if item.strip():
-                result_text = check_news(item)
-                
-                if 'Real News' in result_text:
-                    prediction = 'real'
-                    emoji = '✅'
-                else:
-                    prediction = 'fake'
-                    emoji = '❌'
-                
-                import re
-                confidence_match = re.search(r'Confidence:\s*([\d.]+)%', result_text)
-                confidence = float(confidence_match.group(1)) / 100 if confidence_match else 0.85
-                
-                results.append({
-                    'id': i + 1,
-                    'text': item[:100] + '...' if len(item) > 100 else item,
-                    'prediction': prediction,
-                    'emoji': emoji,
-                    'confidence': confidence,
-                    'fullResult': result_text
-                })
-        
-        # Store file analysis in history
-        analysis_history.append({
-            'type': 'file',
-            'filename': file.filename,
-            'count': len(results),
-            'timestamp': datetime.now().isoformat()
-        })
-        
-        return jsonify({
-            'success': True,
-            'results': results,
-            'summary': {
-                'total': len(results),
-                'real': len([r for r in results if r['prediction'] == 'real']),
-                'fake': len([r for r in results if r['prediction'] == 'fake'])
-            }
-        })
-        
-    except Exception as e:
-        logger.error(f"Error in process-file: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': 'Error processing file. Please try again.'
-        }), 500
-
-@app.route('/api/history')
-def get_history():
-    """Get recent analysis history"""
-    return jsonify({
-        'success': True,
-        'history': analysis_history[-10:]  # Last 10 analyses
-    })
-
-@app.route('/api/stats')
-def get_stats():
-    """Get system statistics"""
-    total_analyses = len(analysis_history)
-    single_analyses = len([h for h in analysis_history if h['type'] == 'single'])
-    bulk_analyses = len([h for h in analysis_history if h.get('type') == 'bulk'])
-    image_analyses = len([h for h in analysis_history if h['type'] == 'image'])
-    file_analyses = len([h for h in analysis_history if h['type'] == 'file'])
-    
-    return jsonify({
-        'success': True,
-        'stats': {
-            'totalAnalyses': total_analyses,
-            'singleAnalyses': single_analyses,
-            'bulk_analyses': bulk_analyses,
-            'imageAnalyses': image_analyses,
-            'fileAnalyses': file_analyses
-        }
-    })
+        return jsonify({'success': False, 'error': 'Error processing image.'}), 500
 
 def extract_text_with_ocr(image_path):
-    """Extract text from image using OCR"""
     try:
         import cv2
         import easyocr
         
         reader = easyocr.Reader(['en'], gpu=False)
         results = reader.readtext(image_path)
-
         extracted_lines = []
         for _, text, confidence in results:
-            if confidence > 0.3:  # Confidence threshold
+            if confidence > 0.3:
                 extracted_lines.append(text)
-
         full_text = " ".join(extracted_lines)
         return full_text if full_text.strip() else "No text could be extracted from the image."
-        
     except Exception as e:
         logger.error(f"OCR Error: {str(e)}")
         return f"Error in OCR processing: {str(e)}"
 
-def parse_txt_file(content):
-    """Parse TXT file content"""
-    # Split by multiple newlines or numbered items
-    items = re.split(r'\n\s*\n|\d+\.\s+', content)
-    return [item.strip() for item in items if item.strip() and len(item.strip()) > 20]
-
-def parse_csv_file(content):
-    """Parse CSV file content"""
-    import csv
-    from io import StringIO
-    
-    try:
-        reader = csv.reader(StringIO(content))
-        rows = list(reader)
-        
-        # Try to find text column
-        if rows:
-            headers = [h.lower() for h in rows[0]]
-            if 'text' in headers:
-                text_index = headers.index('text')
-                return [row[text_index] for row in rows[1:] if len(row) > text_index and row[text_index].strip()]
-            elif 'title' in headers:
-                text_index = headers.index('title')
-                return [row[text_index] for row in rows[1:] if len(row) > text_index and row[text_index].strip()]
-        
-        # Fallback: use first column
-        return [row[0] for row in rows if row and row[0].strip()]
-    except:
-        # Simple line-by-line parsing
-        return [line.strip() for line in content.split('\n') if line.strip()]
-
 def generate_word_analysis(text):
-    """Generate fake and real word analysis based on text content"""
     text_lower = text.lower()
-    
-    # Enhanced word lists
-    fake_indicators = [
-        'breaking', 'shocking', 'unbelievable', 'secret', 'exposed', 
-        'they don\'t want you to know', 'must see', 'viral', 'sensational',
-        'clickbait', 'amazing', 'incredible', 'you won\'t believe'
-    ]
-    
-    real_indicators = [
-        'according to', 'research', 'study', 'official', 'reported',
-        'confirmed', 'data', 'analysis', 'experts', 'scientists',
-        'university', 'journal', 'published', 'findings'
-    ]
-    
-    detected_fake = [word for word in fake_indicators if word in text_lower][:5]
-    detected_real = [word for word in real_indicators if word in text_lower][:5]
-    
-    # Add some default words if none detected
+    fake_indicators = ['breaking', 'shocking', 'unbelievable', 'secret', 'exposed', 'viral', 'clickbait']
+    real_indicators = ['according to', 'research', 'study', 'official', 'reported', 'data', 'experts']
+    detected_fake = [w for w in fake_indicators if w in text_lower][:5]
+    detected_real = [w for w in real_indicators if w in text_lower][:5]
     if not detected_fake:
         detected_fake = ['sensational', 'clickbait', 'viral']
     if not detected_real:
         detected_real = ['source', 'verified', 'factual']
-    
     return detected_fake, detected_real
+
+# -------------------------
+# ✅ Gemini API Config (Fixed)
+# -------------------------
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+print(f"🔑 GEMINI_API_KEY loaded: {bool(GEMINI_API_KEY)}")
+
+try:
+    genai.configure(api_key=GEMINI_API_KEY)
+    gemini_model = genai.GenerativeModel('gemini-pro')
+    GEMINI_AVAILABLE = True
+    print("✅ Gemini API configured successfully")
+except Exception as e:
+    logger.error(f"❌ Gemini API configuration failed: {e}")
+    GEMINI_AVAILABLE = False
+    gemini_model = None
+
+# -------------------------
+# Chatbot
+# -------------------------
+@app.route('/api/chatbot', methods=['POST'])
+def chatbot():
+    try:
+        data = request.json
+        user_message = data.get('message', '').strip()
+        if not user_message:
+            return jsonify({'success': False, 'error': 'No message provided'})
+        
+        logger.info(f"🤖 Chatbot query: {user_message}")
+        
+        if GEMINI_AVAILABLE:
+            prompt = f"You are TruthGuard AI assistant. Respond to: {user_message}"
+            response = gemini_model.generate_content(prompt)
+            return jsonify({'success': True, 'response': response.text})
+        else:
+            return jsonify({'success': True, 'response': "Gemini API not available. Please set GEMINI_API_KEY."})
+    except Exception as e:
+        logger.error(f"Error in chatbot: {str(e)}")
+        return jsonify({'success': False, 'error': 'Error in chatbot.'}), 500
 
 if __name__ == '__main__':
     print("🚀 AI Fake News Detection System starting...")
     print("✅ Enhanced UI with 5-page structure")
     print("📊 Visit http://localhost:5000 to use the application")
     print("📝 Features: Single Check, Bulk Analysis, Image OCR, File Upload")
-    
     app.run(debug=True, host='0.0.0.0', port=5000)
